@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Prototype Board</title>
+  <link rel="stylesheet" href="./prototype-board.css">
+</head>
+<body>
+  <header class="toolbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <div><strong>Prototype Board</strong><button id="project-title" class="project-title" title="Rename project"></button></div>
+    </div>
+    <div class="toolbar-controls">
+      <label><span class="sr-only">Page</span><select id="pages"></select></label>
+      <label class="search"><span class="sr-only">Search boards</span><input id="search" type="search" placeholder="Search boards…" autocomplete="off"></label>
+      <span id="count" class="count" aria-live="polite"></span>
+    </div>
+    <div class="view-controls" aria-label="Canvas controls">
+      <button id="mode-toggle" type="button" aria-pressed="false" title="Switch to edit mode">Edit</button>
+      <button id="zoom-value" type="button" title="Reset zoom (0)">100%</button>
+      <button id="fit" type="button" title="Fit boards (F)">Fit</button>
+      <button id="help" type="button" aria-label="Keyboard help" title="Help (?)">?</button>
+    </div>
+  </header>
+
+  <main id="viewport" tabindex="0" aria-label="Prototype canvas. Drag empty space to pan, scroll to pan, Control plus scroll to zoom.">
+    <div id="world"></div>
+    <div id="empty" class="empty" hidden><strong>No boards found</strong><p>Try another search or page.</p></div>
+  </main>
+
+  <footer class="statusbar"><span id="interaction-hint">View mode · Drag to pan · Ctrl + scroll to zoom</span><span>Click a board to preview</span></footer>
+
+  <dialog id="preview" class="preview">
+    <div class="preview-bar">
+      <div class="preview-title"><strong id="preview-title"></strong><span id="preview-position"></span></div>
+      <div class="preview-controls">
+        <button id="preview-mode" type="button" aria-pressed="false" title="Switch to edit mode">Edit</button>
+        <button id="edit-text" type="button" title="Select a text element in the preview">Edit text</button>
+        <button id="note" type="button">Note</button>
+        <button id="rename-board" type="button">Rename</button>
+        <button id="delete-board" type="button" class="danger">Delete</button>
+        <button id="previous" type="button" title="Previous board (←)">←</button>
+        <button id="next" type="button" title="Next board (→)">→</button>
+        <button id="close-preview" type="button" title="Close (Esc)">Close</button>
+      </div>
+    </div>
+    <div id="text-editor" class="text-editor" hidden>
+      <div><strong>Edit selected text</strong><code id="element-path"></code></div>
+      <textarea id="text-value" rows="2" aria-label="Selected element text"></textarea>
+      <button id="save-text" type="button">Save text</button>
+      <button id="copy-for-ai" type="button" title="Copy a structured request to paste into Kimi">Copy for Kimi</button>
+      <button id="cancel-text" type="button">Cancel</button>
+    </div>
+    <iframe id="preview-frame" title="Interactive prototype preview" sandbox="allow-scripts allow-forms allow-modals allow-popups"></iframe>
+  </dialog>
+
+  <dialog id="note-dialog" class="note-dialog">
+    <h2>Board note</h2>
+    <p id="note-board-title"></p>
+    <textarea id="note-value" rows="7" placeholder="Add feedback, context, or a design decision…" aria-label="Board note"></textarea>
+    <div class="dialog-actions"><button id="cancel-note" type="button">Cancel</button><button id="save-note" type="button" class="primary">Save note</button></div>
+  </dialog>
+
+  <dialog id="action-dialog" class="action-dialog">
+    <form method="dialog">
+      <h2 id="action-title"></h2>
+      <p id="action-message"></p>
+      <input id="action-value" type="text" required aria-label="Name" autocomplete="off">
+      <div class="dialog-actions"><button id="cancel-action" type="button">Cancel</button><button id="confirm-action" value="confirm" class="primary">Save</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="help-dialog" class="help-dialog">
+    <form method="dialog"><button class="help-close" aria-label="Close help">×</button></form>
+    <h2>Move around the board</h2>
+    <dl>
+      <div><dt>Pan</dt><dd>Drag empty canvas or scroll</dd></div>
+      <div><dt>Move an artboard</dt><dd>Drag its label</dd></div>
+      <div><dt>Rename</dt><dd>Double-click its label</dd></div>
+      <div><dt>Zoom</dt><dd><kbd>Ctrl</kbd> + scroll, <kbd>+</kbd>, <kbd>−</kbd></dd></div>
+      <div><dt>Fit / 100%</dt><dd><kbd>F</kbd> / <kbd>0</kbd></dd></div>
+      <div><dt>Search</dt><dd><kbd>Ctrl</kbd> <kbd>K</kbd></dd></div>
+      <div><dt>Preview navigation</dt><dd><kbd>←</kbd> <kbd>→</kbd> or <kbd>Esc</kbd></dd></div>
+      <div><dt>This help</dt><dd><kbd>?</kbd></dd></div>
+    </dl>
+    <p>Open previews to rename, delete, annotate, or select text. Only open trusted exports.</p>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" hidden></div>
+  <script src="./prototype-board-data.js"></script>
+  <script src="./prototype-board.js"></script>
+</body>
+</html>

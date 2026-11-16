@@ -1,0 +1,6 @@
+node_modules/
+.DS_Store
+/example/index.html
+/example/prototype-board.css
+/example/prototype-board.js
+/example/prototype-board-data.js

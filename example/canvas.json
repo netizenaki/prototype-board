@@ -1,0 +1,13 @@
+{
+  "title": "Fieldnotes mobile app",
+  "pages": [
+    { "id": "flow", "name": "Core flow" },
+    { "id": "components", "name": "Components" }
+  ],
+  "boards": {
+    "welcome.html": { "title": "Welcome", "x": 0, "y": 0, "w": 390, "h": 700, "page": "flow" },
+    "library.html": { "title": "Library", "x": 480, "y": 0, "w": 390, "h": 700, "page": "flow" },
+    "note.html": { "title": "Note editor", "x": 960, "y": 0, "w": 390, "h": 700, "page": "flow" },
+    "card.html": { "title": "Note card", "x": 0, "y": 0, "w": 390, "h": 240, "page": "components" }
+  }
+}

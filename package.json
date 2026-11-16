@@ -1,0 +1,15 @@
+{
+  "name": "prototype-board",
+  "version": "1.0.0",
+  "description": "A local artboard canvas for HTML prototypes with notes and safe text overrides",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test",
+    "serve": "node scripts/serve.mjs"
+  },
+  "license": "MIT"
+}

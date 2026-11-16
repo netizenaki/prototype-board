@@ -1,0 +1,8 @@
+{
+  "name": "prototype-board",
+  "version": "1.0.0",
+  "description": "Organize and edit HTML prototypes on a searchable, zoomable local artboard canvas.",
+  "license": "MIT",
+  "homepage": "https://github.com/netizenaki/prototype-board",
+  "commands": "./commands/"
+}
