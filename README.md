@@ -13,14 +13,14 @@ Requires **Node.js 20+**. Expand the instructions for your agent.
 <details>
 <summary><strong>Codex · Custom marketplace</strong></summary>
 
-Add the marketplace, then install the plugin:
+Register the marketplace from a terminal:
 
 ```sh
 codex plugin marketplace add netizenaki/prototype-board
-codex plugin add prototype-board@prototype-board-tools
 ```
 
-After adding the marketplace, you can also install from **Plugins → Prototype Board Tools → Prototype Board** in the ChatGPT desktop app.
+- **ChatGPT desktop app:** Open **Plugins → Prototype Board Tools → Prototype Board** and select **Install**. If the marketplace is missing, restart the app.
+- **Codex CLI:** Run `codex plugin add prototype-board@prototype-board-tools`.
 
 **Update:** Run `codex plugin marketplace upgrade prototype-board-tools`. If you installed from a Git clone, run `git pull --ff-only` in that clone.
 
