@@ -34,7 +34,7 @@ Copy the repository into your agent's skill directory. From the project where yo
 node <skill-directory>/scripts/build.mjs
 ```
 
-Open `.prototype-board/index.html` directly for read-only viewing. To enable editing, start the loopback server from the same project:
+Start or reuse the loopback server from the same project, then open the printed HTTP URL. Codex opens that URL in its in-app browser. To view the board read-only, open `.prototype-board/index.html` directly.
 
 ```sh
 node <skill-directory>/scripts/serve.mjs
@@ -84,7 +84,7 @@ Prototype HTML, `canvas.json`, and supporting assets are never modified. Rerun t
 - Click a board for an interactive preview; use **← / →** to move between boards and **Esc** to close.
 - **?** opens keyboard help. Touch dragging and narrow screens are supported.
 
-Only near-viewport thumbnails are mounted, so large workspaces do not start every prototype at once.
+The canvas uses lightweight placeholders. Only the selected preview runs live. **Pause animations** replaces it with a placeholder and remembers your choice in the browser. The default follows your system's reduced-motion preference. Resuming opens a fresh preview.
 
 ## Notes, deletion, and text edits
 

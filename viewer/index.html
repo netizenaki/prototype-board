@@ -20,6 +20,7 @@
     </div>
     <div class="view-controls" aria-label="Canvas controls">
       <button id="mode-toggle" type="button" aria-pressed="false" title="Switch to edit mode">Edit</button>
+      <button type="button" data-pause-animations aria-pressed="false">Pause animations</button>
       <button id="zoom-value" type="button" title="Reset zoom (0)">100%</button>
       <button id="fit" type="button" title="Fit boards (F)">Fit</button>
       <button id="help" type="button" aria-label="Keyboard help" title="Help (?)">?</button>
@@ -42,6 +43,7 @@
         <button id="note" type="button">Note</button>
         <button id="rename-board" type="button">Rename</button>
         <button id="delete-board" type="button" class="danger">Delete</button>
+        <button type="button" data-pause-animations aria-pressed="false">Pause animations</button>
         <button id="previous" type="button" title="Previous board (←)">←</button>
         <button id="next" type="button" title="Next board (→)">→</button>
         <button id="close-preview" type="button" title="Close (Esc)">Close</button>
@@ -54,7 +56,7 @@
       <button id="copy-for-ai" type="button" title="Copy a structured request to paste into Kimi">Copy for Kimi</button>
       <button id="cancel-text" type="button">Cancel</button>
     </div>
-    <iframe id="preview-frame" title="Interactive prototype preview" sandbox="allow-scripts allow-forms allow-modals allow-popups"></iframe>
+    <p id="preview-paused" role="status" hidden>Animations are paused. Toggle Pause animations to load the preview.</p>
   </dialog>
 
   <dialog id="note-dialog" class="note-dialog">

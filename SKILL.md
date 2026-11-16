@@ -17,13 +17,20 @@ Create an unbounded local canvas in the current project's `.prototype-board` fol
    node <skill-directory>/scripts/build.mjs
    ```
 
-4. Open `.prototype-board/index.html` directly for read-only viewing, or use the loopback server below for editing.
+4. For any request to open or reopen the board, use the loopback server below. Use `file://` only when the user explicitly wants direct read-only viewing.
 
 The generator writes only `index.html`, `prototype-board.css`, `prototype-board.js`, and `prototype-board-data.js` inside `.prototype-board`. Add HTML prototypes to that folder and rerun the generator. It also supports an optional `canvas.json` there for page names, board titles, dimensions, and positions.
 
 ## Naming artboards
 
 When creating an artboard, always give it a concise, unique, descriptive name reflecting its flow and state, such as `Checkout · Empty cart` or `Settings · Permission blocked`. Use a descriptive lowercase HTML filename and set the matching `title` in `canvas.json`. Never leave a new board unnamed or use generic names such as `Screen 1`. Users can rename boards by double-clicking their labels or using Rename in the preview. Click the project name in the toolbar to rename the project.
+
+## Open or reopen in Codex
+
+1. Follow the Generate steps from the current project to pick up bundled viewer updates.
+2. From that same project, run `node <skill-directory>/scripts/serve.mjs` as a background task. Keep the server running and use the printed `http://127.0.0.1:<port>/index.html` URL. If the workspace's server is already running, reuse its URL.
+3. Open the HTTP URL in Codex's in-app browser. Reuse and reload an existing tab for that board, or open a visible tab (with the computer-use browser API, use `cua.createBrowserTab("iab", url, { visible: true })`). If the in-app browser is unavailable, open the HTTP URL in the system browser.
+4. Verify the board opens in View mode with Edit available.
 
 ## Kimi Code panel
 
@@ -42,7 +49,9 @@ Use the page picker and search to narrow the boards. Click a board for its full-
 
 Always start in **View mode** to prevent accidental changes. Only enable editing after the user clicks **Edit** in the toolbar. In Edit mode, users can drag board labels to move them, rename boards and the project, add notes, remove boards without deleting source HTML, and select text in the preview to change it. **Done** returns to View mode. Renames use a confirmation prompt, deletion requires confirmation, and text overrides require confirmation before saving. Never move or modify boards in View mode.
 
-Edits persist in `.prototype-board/prototype-board-edits.json`; source HTML and `canvas.json` remain unchanged. Text overrides appear immediately in previews and thumbnails and are reapplied whenever the prototype loads. Direct `file://` viewing is read-only.
+Edits persist in `.prototype-board/prototype-board-edits.json`; source HTML and `canvas.json` remain unchanged. Text overrides appear immediately in the live preview and are reapplied whenever the prototype loads. Direct `file://` viewing disables Edit and explains how to open the HTTP board in its tooltip.
+
+The canvas uses lightweight placeholders. Only the selected preview mounts a live iframe. Closing the preview or selecting **Pause animations** removes the iframe and stops its embedded page. The setting follows the system's reduced-motion preference until the user makes a choice, which the browser remembers for that board's HTTP origin. Resuming opens a fresh preview. Standalone prototypes remain interactive.
 
 **Copy for Kimi** copies a structured text-edit request containing the board, file, element selector, current text, and requested replacement or instruction. When the user pastes such a request, apply it as a text override through the running server's `POST /__prototype-board/edit` endpoint with action `text`, fields `file`, `path`, and `text`. If the server is unavailable, update the `text` section of `prototype-board-edits.json` directly and regenerate. Do not claim an AI edit is applied until the override is saved.
 

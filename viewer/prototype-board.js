@@ -6,10 +6,15 @@
   const viewport = $('viewport');
   const world = $('world');
   const preview = $('preview');
-  const previewFrame = $('preview-frame');
+  const motionPreference = matchMedia('(prefers-reduced-motion: reduce)');
+  const pauseButtons = document.querySelectorAll('[data-pause-animations]');
+  const pauseKey = 'prototype-board:pause-animations';
+  let pauseChoice = null;
+  try { pauseChoice = localStorage.getItem(pauseKey); } catch {}
+  let previewFrame = null;
   const help = $('help-dialog');
   const padding = 32;
-  const canEdit = ['localhost', '127.0.0.1'].includes(location.hostname);
+  const canEdit = location.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(location.hostname);
   let editMode = false;
   let edits = data?.edits ?? { title: null, boards: {}, text: {} };
   let boards = [];
@@ -20,7 +25,6 @@
   let pan = { x: 0, y: 0 };
   let bounds = { x: 0, y: 0, width: 1, height: 1 };
   let previewIndex = 0;
-  let frameUpdate = 0;
   let drag = null;
   let dragged = false;
   let selected = null;
@@ -52,12 +56,15 @@
     for (const id of ['mode-toggle', 'preview-mode']) {
       $(id).textContent = editMode ? 'Done' : 'Edit';
       $(id).setAttribute('aria-pressed', String(editMode));
-      $(id).title = editMode ? 'Return to view mode' : 'Switch to edit mode';
+      $(id).title = !canEdit
+        ? 'Ask Codex to open the Prototype Board, or run scripts/serve.mjs from the project and open its HTTP URL.'
+        : editMode ? 'Return to view mode' : 'Switch to edit mode';
     }
     $('interaction-hint').textContent = editMode ? 'Edit mode · Drag board labels to organize' : 'View mode · Drag to pan · Ctrl + scroll to zoom';
-    for (const id of ['edit-text', 'note', 'rename-board', 'delete-board', 'project-title']) {
+    for (const id of ['note', 'rename-board', 'delete-board', 'project-title']) {
       $(id).disabled = !editMode;
     }
+    $('edit-text').disabled = !editMode || !previewFrame;
     if (!editMode) {
       stopTextSelection();
       if ($('note-dialog').open) $('note-dialog').close();
@@ -221,18 +228,13 @@
 
     const frame = document.createElement('div');
     frame.className = 'board-frame';
-    const iframe = document.createElement('iframe');
-    iframe.title = board.title;
-    iframe.loading = 'lazy';
-    iframe.tabIndex = -1;
-    iframe.setAttribute('sandbox', 'allow-scripts allow-forms allow-modals allow-popups');
-    iframe.dataset.src = source(board.file);
     const open = document.createElement('button');
     open.className = 'board-open';
     open.type = 'button';
+    open.textContent = 'Open preview';
     open.setAttribute('aria-label', `Preview ${board.title}`);
     open.addEventListener('click', () => openPreview(active.indexOf(board)));
-    frame.append(iframe, open);
+    frame.append(open);
     article.append(label, frame);
     return article;
   }
@@ -255,28 +257,9 @@
     fit();
   }
 
-  function updateFrames() {
-    frameUpdate = 0;
-    const rect = viewport.getBoundingClientRect();
-    for (const article of world.children) {
-      const board = active.find((item) => item.id === article.dataset.id);
-      if (!board) continue;
-      const x = pan.x + (board.x - bounds.x + padding) * scale;
-      const y = pan.y + (board.y - bounds.y + padding + 34) * scale;
-      const near = x + board.w * scale > -400 && y + board.h * scale > -400 && x < rect.width + 400 && y < rect.height + 400;
-      const iframe = article.querySelector('iframe');
-      if (near && !iframe.src) iframe.src = iframe.dataset.src;
-    }
-  }
-
-  function scheduleFrames() {
-    if (!frameUpdate) frameUpdate = requestAnimationFrame(updateFrames);
-  }
-
   function applyTransform() {
     world.style.transform = `translate(${pan.x}px, ${pan.y}px) scale(${scale})`;
     $('zoom-value').textContent = `${Math.round(scale * 100)}%`;
-    scheduleFrames();
   }
 
   function fit() {
@@ -297,9 +280,35 @@
   }
 
   function stopTextSelection() {
-    previewFrame.contentWindow?.postMessage({ type: 'prototype-board:select', enabled: false }, '*');
+    previewFrame?.contentWindow?.postMessage({ type: 'prototype-board:select', enabled: false }, '*');
     $('text-editor').hidden = true;
     selected = null;
+  }
+
+  function animationsPaused() {
+    return pauseChoice === null ? motionPreference.matches : pauseChoice === 'true';
+  }
+
+  function syncMotion() {
+    for (const button of pauseButtons) button.setAttribute('aria-pressed', String(animationsPaused()));
+    if (preview.open) updatePreviewFrame(active[previewIndex]);
+  }
+
+  function updatePreviewFrame(board) {
+    const nextSource = preview.open && board && !animationsPaused() ? source(board.file) : null;
+    $('preview-paused').hidden = !preview.open || !animationsPaused();
+    $('edit-text').disabled = !editMode || !nextSource;
+    if (previewFrame?.getAttribute('src') === nextSource) return;
+    stopTextSelection();
+    previewFrame?.remove();
+    previewFrame = null;
+    if (!nextSource) return;
+    previewFrame = document.createElement('iframe');
+    previewFrame.id = 'preview-frame';
+    previewFrame.title = 'Interactive prototype preview';
+    previewFrame.setAttribute('sandbox', 'allow-scripts allow-forms allow-modals allow-popups');
+    previewFrame.src = nextSource;
+    preview.append(previewFrame);
   }
 
   function openPreview(index) {
@@ -309,11 +318,10 @@
     const board = active[index];
     $('preview-title').textContent = board.title;
     $('preview-position').textContent = `${index + 1} of ${active.length} · ${board.w} × ${board.h}${board.note ? ' · Note' : ''}`;
-    const nextSource = source(board.file);
-    if (previewFrame.getAttribute('src') !== nextSource) previewFrame.src = nextSource;
     $('previous').disabled = active.length < 2;
     $('next').disabled = active.length < 2;
     if (!preview.open) preview.showModal();
+    updatePreviewFrame(board);
   }
 
   function movePreview(direction) {
@@ -353,12 +361,13 @@
   async function saveText() {
     const board = active[previewIndex];
     if (!board || !selected) return;
+    const path = selected.path;
+    const text = $('text-value').value;
     if (!await ask({ title: 'Save text override?', message: 'This change will be visible immediately and whenever the prototype loads. The source HTML will not be changed.', confirmLabel: 'Save text' })) return;
     try {
-      const next = await commit({ action: 'text', file: board.file, path: selected.path, text: $('text-value').value });
-      edits = next;
-      for (const iframe of document.querySelectorAll('iframe')) {
-        iframe.contentWindow?.postMessage({ type: 'prototype-board:set-text', path: selected.path, text: $('text-value').value }, '*');
+      await commit({ action: 'text', file: board.file, path, text });
+      if (active[previewIndex]?.file === board.file) {
+        previewFrame?.contentWindow?.postMessage({ type: 'prototype-board:set-text', path, text }, '*');
       }
       stopTextSelection();
       toast('Text override saved. Source HTML preserved.');
@@ -388,7 +397,7 @@
   }
 
   window.addEventListener('message', (event) => {
-    if (event.source !== previewFrame.contentWindow || event.data?.type !== 'prototype-board:selected') return;
+    if (!previewFrame || event.source !== previewFrame.contentWindow || event.data?.type !== 'prototype-board:selected') return;
     selected = { path: event.data.path, text: event.data.text };
     $('element-path').textContent = selected.path;
     $('text-value').value = selected.text;
@@ -408,13 +417,21 @@
 
   for (const id of ['mode-toggle', 'preview-mode']) {
     $(id).disabled = !canEdit;
-    if (!canEdit) $(id).title = 'Open through the Prototype Board skill to edit';
     $(id).addEventListener('click', () => {
       setMode(!editMode);
       toast(editMode ? 'Edit mode enabled.' : 'View mode enabled.');
     });
   }
   setMode(false);
+  for (const button of pauseButtons) {
+    button.addEventListener('click', () => {
+      pauseChoice = String(!animationsPaused());
+      try { localStorage.setItem(pauseKey, pauseChoice); } catch {}
+      syncMotion();
+    });
+  }
+  motionPreference.addEventListener('change', syncMotion);
+  syncMotion();
 
   $('pages').addEventListener('change', (event) => { pageId = event.target.value; render(); });
   $('search').addEventListener('input', (event) => { query = event.target.value.trim().toLowerCase(); render(); });
@@ -431,7 +448,7 @@
   $('cancel-note').addEventListener('click', () => $('note-dialog').close());
   $('cancel-action').addEventListener('click', () => $('action-dialog').close('cancel'));
   $('edit-text').addEventListener('click', () => {
-    if (previewFrame.getAttribute('src') === 'about:blank') return;
+    if (!previewFrame) return;
     toast('Click a text element in the preview.');
     previewFrame.contentWindow?.postMessage({ type: 'prototype-board:select', enabled: true }, '*');
   });
@@ -447,7 +464,7 @@
       toast('Project renamed.');
     } catch (error) { report(error); }
   });
-  preview.addEventListener('close', () => { stopTextSelection(); previewFrame.src = 'about:blank'; });
+  preview.addEventListener('close', () => { if (!preview.open) updatePreviewFrame(); });
 
   viewport.addEventListener('wheel', (event) => {
     event.preventDefault();
@@ -461,7 +478,7 @@
   }, { passive: false });
 
   viewport.addEventListener('pointerdown', (event) => {
-    if (event.button !== 0) return;
+    if (event.button !== 0 || event.target.closest('.board-open')) return;
     drag = { x: event.clientX, y: event.clientY, panX: pan.x, panY: pan.y };
     dragged = false;
     viewport.setPointerCapture(event.pointerId);
@@ -513,7 +530,6 @@
     }
   });
 
-  window.addEventListener('resize', scheduleFrames);
   render();
   if (canEdit) {
     fetch('/__prototype-board/state').then((response) => response.ok ? response.json() : null).then((state) => {
