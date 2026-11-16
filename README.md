@@ -6,17 +6,70 @@ A quiet, local artboard workspace for HTML UI prototypes. Compare screens side b
 
 No framework, package installation, hosted backend, account, or design-tool integration. The complete viewer is bundled and copied by the generator, so the skill never rebuilds the canvas from scratch or spends AI credits recreating its interface. The viewer is plain HTML/CSS/JavaScript; the generator and optional editing server use only Node.js built-ins.
 
-## Kimi Code: one-command installation
+## Install from a custom marketplace
+
+Prototype Board requires Node.js 20 or newer on the machine running the agent.
+
+### Codex in the ChatGPT desktop app
+
+Add the **Prototype Board Tools** marketplace once with the Codex CLI:
+
+```sh
+codex plugin marketplace add netizenaki/prototype-board
+```
+
+Open **Plugins** in the desktop app, select **Prototype Board Tools**, and install **Prototype Board**. Open your project and ask Codex to **open my Prototype Board**. To refresh the marketplace:
+
+```sh
+codex plugin marketplace upgrade prototype-board-tools
+```
+
+### Kimi Code
+
+Browse the custom marketplace and select **Prototype Board**:
+
+```text
+/plugins marketplace https://raw.githubusercontent.com/netizenaki/prototype-board/main/kimi.marketplace.json
+```
+
+You can also install or update directly, then reload the session:
 
 ```text
 /plugins install https://github.com/netizenaki/prototype-board
+/reload
 ```
 
-Create or reopen the board in the current project:
+Kimi's repository URL selects the latest GitHub release, or the default branch if there are no releases. Create or reopen the board from your project with `/prototype-board:open`.
 
-```text
-/prototype-board:open
+### Gemini CLI
+
+Install from a terminal with Git available:
+
+```sh
+gemini extensions install https://github.com/netizenaki/prototype-board
 ```
+
+To update, run `gemini extensions update prototype-board`, then start a new Gemini CLI session.
+
+## Install as a local skill
+
+For a local agent that supports Agent Skills, copy the entire [skills/prototype-board](skills/prototype-board) directory into the agent's skills directory. To update, replace it with the same directory from the new release. The folder contains the scripts and viewer the skill needs.
+
+For OpenCode, put it under `~/.config/opencode/skills/prototype-board` for all projects, or `.opencode/skills/prototype-board` for one project.
+
+Codex users who prefer a Git checkout can clone the repository into their personal skills directory:
+
+```sh
+git clone https://github.com/netizenaki/prototype-board.git "$HOME/.agents/skills/prototype-board"
+```
+
+To update a Git installation:
+
+```sh
+git -C "$HOME/.agents/skills/prototype-board" pull --ff-only
+```
+
+If you cloned the skill to another location, use that path in the update command. Restart Codex if it still shows the old skill after updating.
 
 The board always uses `.prototype-board` in the current working directory. It starts empty, with no sample artboards. Add HTML prototypes to that folder and run the command again. Custom directory arguments are not supported.
 
@@ -24,11 +77,13 @@ You do not need to remember the slash command. Natural requests such as **“ope
 
 Run the same command again if you accidentally close the panel. It reuses the workspace's loopback server and reveals the panel with `browser.switch_tab`. Device emulation is disabled so Kimi's device toolbar does not resize or rescale the canvas.
 
-The repository root is both the skill and the Kimi plugin; no separate release bundle is needed.
+## Rebuild existing boards after updating
 
-## Other agents and manual use
+From the original board's project, ask Codex to reopen your board or run `/prototype-board:open` in Kimi Code. This copies the updated viewer into `.prototype-board` and preserves the artboard HTML and saved edits. In version 1.1.0, the toolbar shows **Pause animations**.
 
-Copy the repository into your agent's skill directory. From the project where you want the board, run with Node 20 or newer:
+## Manual use
+
+From the project where you want the board, run the scripts in the installed skill directory. In a repository checkout, that directory is `skills/prototype-board`.
 
 ```sh
 node <skill-directory>/scripts/build.mjs
@@ -106,6 +161,8 @@ Only open prototypes you trust. Prototypes run in sandboxed iframes, but their s
 ```sh
 npm test
 ```
+
+For a release, set the same version in `plugin.json`, `kimi.plugin.json`, `gemini-extension.json`, and `package.json`. Run the tests, push the versioned commit, and publish a GitHub release with a matching tag such as `v1.1.0`. Codex refreshes the marketplace from Git. Kimi and Gemini can pick up published releases.
 
 Tests cover metadata parsing, layout preservation, grid fallback, empty workspaces, path validation, safe serialization, repeatable generation, unchanged sources, edit persistence, server recovery, fixed-workspace commands, and plugin metadata. Browser checks should exercise both direct `file://` viewing and the loopback editing workflow.
 

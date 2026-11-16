@@ -1,0 +1,20 @@
+{
+  "name": "prototype-board-tools",
+  "interface": {
+    "displayName": "Prototype Board Tools"
+  },
+  "plugins": [
+    {
+      "name": "prototype-board",
+      "source": {
+        "source": "local",
+        "path": "./"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}

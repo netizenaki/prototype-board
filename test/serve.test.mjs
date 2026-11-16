@@ -6,10 +6,10 @@ import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createServer, portFor } from '../scripts/serve.mjs';
+import { createServer, portFor } from '../skills/prototype-board/scripts/serve.mjs';
 
 const example = fileURLToPath(new URL('../example', import.meta.url));
-const script = fileURLToPath(new URL('../scripts/serve.mjs', import.meta.url));
+const script = fileURLToPath(new URL('../skills/prototype-board/scripts/serve.mjs', import.meta.url));
 const run = promisify(execFile);
 
 test('serves checked-in prototypes and missing-file responses over loopback HTTP', async (context) => {

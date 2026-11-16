@@ -1,0 +1,10 @@
+{
+  "version": "2",
+  "plugins": [
+    {
+      "id": "prototype-board",
+      "displayName": "Prototype Board",
+      "source": "https://github.com/netizenaki/prototype-board"
+    }
+  ]
+}

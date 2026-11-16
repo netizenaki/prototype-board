@@ -6,10 +6,10 @@ import { mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { build, readExport, safeHtmlPath, serializeData } from '../scripts/build.mjs';
+import { build, readExport, safeHtmlPath, serializeData } from '../skills/prototype-board/scripts/build.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
-const script = fileURLToPath(new URL('../scripts/build.mjs', import.meta.url));
+const script = fileURLToPath(new URL('../skills/prototype-board/scripts/build.mjs', import.meta.url));
 const run = promisify(execFile);
 
 async function fixture() {
@@ -98,7 +98,7 @@ test('build writes only four viewer files, leaves sources unchanged, and is repe
 test('skill, package, plugin manifest, and command are valid and complete', async () => {
   const manifest = JSON.parse(await readFile(path.join(root, 'kimi.plugin.json'), 'utf8'));
   const pkg = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
-  const skill = await readFile(path.join(root, 'SKILL.md'), 'utf8');
+  const skill = await readFile(path.join(root, manifest.skills, 'prototype-board', 'SKILL.md'), 'utf8');
   const command = await readFile(path.join(root, manifest.commands, 'open.md'), 'utf8');
   assert.equal(manifest.name, 'prototype-board');
   assert.equal(manifest.license, 'MIT');
@@ -109,4 +109,17 @@ test('skill, package, plugin manifest, and command are valid and complete', asyn
   assert.doesNotMatch(command, /\$ARGUMENTS|argument-hint/);
   assert.match(command, /Always use `\.prototype-board`/);
   assert.equal(pkg.scripts.example, undefined);
+  const plugin = JSON.parse(await readFile(path.join(root, 'plugin.json'), 'utf8'));
+  const marketplace = JSON.parse(await readFile(path.join(root, '.agents/plugins/marketplace.json'), 'utf8'));
+  const kimiMarketplace = JSON.parse(await readFile(path.join(root, 'kimi.marketplace.json'), 'utf8'));
+  const gemini = JSON.parse(await readFile(path.join(root, 'gemini-extension.json'), 'utf8'));
+  const [entry] = marketplace.plugins;
+  assert.equal(path.resolve(root, entry.source.path), path.resolve(root));
+  assert.equal(entry.name, plugin.name);
+  assert.equal(kimiMarketplace.plugins[0].id, manifest.name);
+  assert.equal(kimiMarketplace.plugins[0].source, manifest.homepage);
+  assert.equal(plugin.version, manifest.version);
+  assert.equal(plugin.version, pkg.version);
+  assert.equal(gemini.name, plugin.name);
+  assert.equal(gemini.version, plugin.version);
 });
