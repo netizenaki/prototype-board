@@ -49,6 +49,17 @@ test('falls back to a deterministic grid without canvas.json', async () => {
   assert.deepEqual(data.boards.map((board) => [board.x, board.y]), [[0, 0], [1248, 0]]);
 });
 
+test('upgrades the legacy default page label while preserving artboard assignments', async () => {
+  const directory = await fixture();
+  await writeFile(path.join(directory, 'canvas.json'), JSON.stringify({
+    pages: [{ id: 'all', name: 'All boards' }, { id: 'other', name: 'Other' }],
+    boards: { 'one.dc.html': { x: 0, y: 0, w: 390, h: 844, page: 'all' } },
+  }));
+  const data = await readExport(directory);
+  assert.deepEqual(data.pages, [{ id: 'all', name: 'unnamed' }, { id: 'other', name: 'Other' }]);
+  assert.equal(data.boards[0].page, 'all');
+});
+
 test('creates a new empty canvas without sample artboards', async () => {
   const parent = await mkdtemp(path.join(tmpdir(), 'prototype-board-empty-'));
   const directory = path.join(parent, '.prototype-board');
@@ -56,7 +67,7 @@ test('creates a new empty canvas without sample artboards', async () => {
   assert.match(stdout, /0 boards/);
   const data = await readExport(directory);
   assert.equal(data.boards.length, 0);
-  assert.deepEqual(data.pages, [{ id: 'all', name: 'All boards' }]);
+  assert.deepEqual(data.pages, [{ id: 'all', name: 'unnamed' }]);
   assert.deepEqual((await readdir(directory)).sort(), ['index.html', 'prototype-board-data.js', 'prototype-board.css', 'prototype-board.js'].sort());
   await assert.rejects(run(process.execPath, [script, 'elsewhere'], { cwd: parent }), /directory arguments are not supported/);
 });

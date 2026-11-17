@@ -147,7 +147,9 @@ export function createServer(directory) {
         const fileStat = await stat(path.join(root, file));
         const width = Math.max(1, Math.min(8192, Math.round(board.w)));
         const height = Math.max(1, Math.min(8192, Math.round(board.h)));
-        const maxSize = url.searchParams.has('full') ? 1920 : 640;
+        const requestedSize = Number(url.searchParams.get('size'));
+        const maxSize = url.searchParams.has('full') ? 4096
+          : [640, 1280, 2560, 4096].includes(requestedSize) ? requestedSize : 640;
         const key = JSON.stringify([file, fileStat.mtimeMs, width, height, maxSize, text[file]]);
         const captureUrl = `http://127.0.0.1:${server.address().port}/__prototype-board/thumbnail-frame?file=${encodeURIComponent(file)}`;
         if (response.destroyed) return;

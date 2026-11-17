@@ -96,7 +96,7 @@ async function capturePng(address, url, width, height, maxSize) {
     ({ browserContextId: context } = await send('Target.createBrowserContext', { disposeOnDetach: true }));
     const { targetId } = await send('Target.createTarget', { url: 'about:blank', browserContextId: context });
     ({ sessionId: session } = await send('Target.attachToTarget', { targetId, flatten: true }));
-    const deviceScaleFactor = Math.min(1, maxSize / Math.max(width, height));
+    const deviceScaleFactor = Math.min(4, maxSize / Math.max(width, height));
     await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor, mobile: false });
     await send('Page.enable');
     await send('Page.setLifecycleEventsEnabled', { enabled: true });

@@ -12,6 +12,7 @@
   const motionPreference = matchMedia('(prefers-reduced-motion: reduce)');
   const pauseButtons = document.querySelectorAll('[data-pause-animations]');
   const pauseKey = 'prototype-board:pause-animations';
+  const pageKey = `prototype-board:active-page:${location.pathname}`;
   const icons = {
     play: '<path fill="currentColor" stroke="none" d="M6 3v14l11-7z"/>',
     pause: '<path d="M7 4v12m6-12v12"/>',
@@ -51,6 +52,7 @@
   let active = [];
   let pages = [];
   let pageId = '';
+  try { pageId = localStorage.getItem(pageKey) ?? ''; } catch {}
   let query = '';
   let scale = 1;
   let pan = { x: 0, y: 0 };
@@ -127,7 +129,9 @@
     const byId = new Map(data.pages.map((page) => [page.id, page]));
     for (const page of edits.pages ?? []) byId.set(page.id, { ...byId.get(page.id), ...page });
     pages = [...byId.values()].filter((page) => !page.deleted);
-    if (!pages.length) pages.push({ id: 'all', name: 'All boards' });
+    if (!pages.length) pages.push({ id: 'all', name: 'unnamed' });
+    pages = pages.map((page) => page.id === 'all' && page.name === 'All boards'
+      ? { ...page, name: 'unnamed' } : page);
     const pageIds = new Set(pages.map((page) => page.id));
     if (!pageIds.has(pageId)) pageId = pages[0].id;
     syncPagePicker();
@@ -186,6 +190,12 @@
     return `/__prototype-board/thumbnail?file=${encodeURIComponent(file)}${priority ? '&priority=1' : ''}`;
   }
 
+  function stillSize(image) {
+    const rect = image.getBoundingClientRect();
+    const pixels = Math.max(rect.width, rect.height) * (window.devicePixelRatio || 1);
+    return [640, 1280, 2560, 4096].find((size) => size >= pixels) ?? 4096;
+  }
+
   function makeStill(board, priority = false) {
     const still = document.createElement('div');
     still.className = 'board-still';
@@ -224,12 +234,14 @@
     for (const [image, request] of thumbnailRequests) {
       if (!candidates.has(image)) request.abort();
     }
-    const next = [...candidates].filter(([image]) => !image.src && !image.dataset.failed && !thumbnailRequests.has(image))
+    const next = [...candidates].filter(([image]) => Number(image.dataset.size ?? 0) < stillSize(image)
+      && image.dataset.failed !== String(stillSize(image)) && !thumbnailRequests.has(image))
       .sort((a, b) => a[1] - b[1]);
     for (const [image, priority] of next.slice(0, Math.max(0, 2 - thumbnailRequests.size))) {
       const request = new AbortController();
+      const size = stillSize(image);
       thumbnailRequests.set(image, request);
-      fetch(thumbnailUrl(image.dataset.file, priority < 0), { signal: request.signal }).then(async (response) => {
+      fetch(thumbnailUrl(image.dataset.file, priority < 0) + `&size=${size}`, { signal: request.signal }).then(async (response) => {
         if (!response.ok) throw new Error('Thumbnail unavailable.');
         const blob = await response.blob();
         if (request.signal.aborted || !image.isConnected) return;
@@ -238,8 +250,9 @@
         image.addEventListener('load', release, { once: true });
         image.addEventListener('error', release, { once: true });
         image.src = url;
+        image.dataset.size = String(size);
       }).catch(() => {
-        if (!request.signal.aborted) image.dataset.failed = 'true';
+        if (!request.signal.aborted) image.dataset.failed = String(size);
       }).finally(() => {
         thumbnailRequests.delete(image);
         scheduleThumbnails();
@@ -520,6 +533,7 @@
   }
 
   function render() {
+    try { localStorage.setItem(pageKey, pageId); } catch {}
     const previewFile = preview.open ? active[previewIndex]?.file : null;
     active = boards.filter((board) => board.page === pageId && `${board.title} ${board.file}`.toLowerCase().includes(query));
     const nextPreview = active.findIndex((board) => board.file === previewFile);
@@ -795,6 +809,7 @@
     syncCanvasPreview();
   });
   new ResizeObserver(fitPreview).observe(previewStage);
+  new ResizeObserver(scheduleThumbnails).observe(viewport);
 
   viewport.addEventListener('wheel', (event) => {
     event.preventDefault();

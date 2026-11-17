@@ -23,6 +23,8 @@ The generator writes only `index.html`, `prototype-board.css`, `prototype-board.
 
 ## Naming artboards
 
+The initial page uses the placeholder name `unnamed`. When creating prototypes from a user's prompt, rename that page to a concise name reflecting the requested app, flow, or grouping. Use an explicit page name from the user when provided. Rename the existing placeholder page instead of leaving it empty and creating another page. Preserve existing descriptive page names unless the user requests a rename.
+
 When creating an artboard, always give it a concise, unique, descriptive name reflecting its flow and state, such as `Checkout · Empty cart` or `Settings · Permission blocked`. Use a descriptive lowercase HTML filename and set the matching `title` in `canvas.json`. Never leave a new board unnamed or use generic names such as `Screen 1`. Users can double-click an artboard's name to rename it inline on HTTP boards. Press Enter or click away to save, or Escape to cancel. Click the project name in the toolbar to rename the project.
 
 ## Open or reopen in Codex
@@ -48,9 +50,11 @@ Run the server command in step 4 above from the current project. Open or reload 
 
 ## Review and edit
 
-Use the page picker and search to narrow the boards. Use Play on canvas in an artboard's header to run its preview in place, or Preview full screen to open the larger interactive view. In Edit mode, use the header's Delete button to remove an artboard from the canvas.
+The canvas displays one page at a time. New workspaces start with `unnamed`. Use the page picker to switch pages and search within the selected page. The browser remembers the active page across reloads, falling back to the first available page if it was deleted. Use Play on canvas in an artboard's header to run its preview in place, or Preview full screen to open the larger interactive view. In Edit mode, use the header's Delete button to remove an artboard from the canvas.
 
 Full-screen previews preserve the artboard's original viewport and scale down to fit the available width. Tall previews scroll vertically. Play and Pause use the same display size.
+
+Canvas stills upgrade as visible artboards grow with zoom or screen pixel density. Keep the original prototype viewport during capture so sharper stills preserve the layout. Captures are bounded to 4096 pixels on the longest edge.
 
 In Edit mode, choose + New page from the page picker. Open the Page options menu beside it to rename or delete the selected page. Use Move to page in the preview to relocate an artboard. When deleting a page, select a destination for its artboards. Keep at least one page.
 

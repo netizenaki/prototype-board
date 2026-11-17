@@ -24,7 +24,7 @@ function fallbackLayout(files) {
   const columns = Math.max(1, Math.ceil(Math.sqrt(files.length)));
   return {
     title: 'Prototype Board',
-    pages: [{ id: 'all', name: 'All boards' }],
+    pages: [{ id: 'all', name: 'unnamed' }],
     boards: files.map((file, index) => ({
       id: file,
       file,
@@ -55,7 +55,7 @@ async function readLayout(directory) {
   if (!canvas) return fallbackLayout(files);
   const pages = Array.isArray(canvas.pages) && canvas.pages.length
     ? canvas.pages.map((page, index) => ({ id: String(page.id ?? `page-${index + 1}`), name: String(page.name ?? `Page ${index + 1}`) }))
-    : [{ id: 'all', name: 'All boards' }];
+    : [{ id: 'all', name: 'unnamed' }];
   const pageIds = new Set(pages.map((page) => page.id));
   const boards = Object.entries(canvas.boards ?? {}).map(([file, board]) => {
     const normalized = safeHtmlPath(file);

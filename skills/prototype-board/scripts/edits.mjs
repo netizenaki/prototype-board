@@ -26,7 +26,10 @@ export function applyEdits(data, edits) {
   const byId = new Map(data.pages.map((page) => [page.id, page]));
   for (const page of edits.pages ?? []) byId.set(page.id, { ...byId.get(page.id), ...page });
   const pages = [...byId.values()].filter((page) => !page.deleted);
-  if (!pages.length) pages.push({ id: 'all', name: 'All boards' });
+  if (!pages.length) pages.push({ id: 'all', name: 'unnamed' });
+  for (const page of pages) {
+    if (page.id === 'all' && page.name === 'All boards') page.name = 'unnamed';
+  }
   const pageIds = new Set(pages.map((page) => page.id));
   return {
     ...data,
