@@ -85,6 +85,8 @@ Use **Undo** and **Redo** in Edit mode. The running board server keeps the last 
 
 After updating the skill, ask your agent to reopen the board from its project. This refreshes the viewer and updates the local server at the same URL. Saved edits and source HTML are preserved. If the server predates automatic updates and is still running, stop it once and reopen the board.
 
+At overview zoom, artboards appear as outlines. Zoom in to load lightweight stills for the visible artboards. Full-screen Pause uses a sharper still, and the server caches both sizes locally.
+
 <details>
 <summary><strong>Shortcuts and layout</strong></summary>
 

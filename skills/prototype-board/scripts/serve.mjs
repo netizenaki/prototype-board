@@ -91,12 +91,35 @@ async function update(edits, change, root) {
 
 export function createServer(directory) {
   const root = path.resolve(directory);
-  const renderThumbnail = createThumbnailRenderer();
+  const thumbnails = createThumbnailRenderer(root, runtime);
   let queue = Promise.resolve();
   let restarting = false;
   const undo = [];
   const redo = [];
   let lastSaved;
+  let thumbnailIndex;
+
+  async function thumbnailLayout() {
+    const stamps = await Promise.all(['.', 'canvas.json', EDITS_FILE].map(async (file) => {
+      const metadata = await stat(path.join(root, file)).catch((error) => {
+        if (error.code !== 'ENOENT') throw error;
+      });
+      return metadata && [metadata.mtimeMs, metadata.size];
+    }));
+    const key = JSON.stringify(stamps);
+    if (thumbnailIndex?.key !== key) {
+      const index = readExport(root).then(({ boards, edits }) => ({
+        byFile: new Map(boards.map((board) => [board.file, board])),
+        files: new Set(boards.map((board) => board.file)),
+        text: edits.text,
+      }));
+      thumbnailIndex = { key, index };
+      index.catch(() => {
+        if (thumbnailIndex?.index === index) thumbnailIndex = null;
+      });
+    }
+    return thumbnailIndex.index;
+  }
 
   function state(response, edits) {
     response.setHeader('X-Prototype-Board-Undo', String(undo.length > 0));
@@ -111,9 +134,9 @@ export function createServer(directory) {
       const pathname = decodeURIComponent(url.pathname);
       if (request.method === 'GET' && ['/__prototype-board/thumbnail', '/__prototype-board/thumbnail-frame'].includes(pathname)) {
         const file = safeHtmlPath(url.searchParams.get('file'));
-        const { boards, edits } = await readExport(root);
-        const board = boards.find((item) => item.file === file && !item.deleted);
-        if (!board) { response.writeHead(404).end(); return; }
+        const { byFile, files, text } = await thumbnailLayout();
+        const board = byFile.get(file);
+        if (!board || board.deleted) { response.writeHead(404).end(); return; }
         if (pathname.endsWith('-frame')) {
           const src = file.split('/').map(encodeURIComponent).join('/');
           response.writeHead(200, { 'Content-Type': types['.html'] }).end(
@@ -124,9 +147,17 @@ export function createServer(directory) {
         const fileStat = await stat(path.join(root, file));
         const width = Math.max(1, Math.min(8192, Math.round(board.w)));
         const height = Math.max(1, Math.min(8192, Math.round(board.h)));
-        const key = JSON.stringify([file, fileStat.mtimeMs, width, height, edits.text[file]]);
+        const maxSize = url.searchParams.has('full') ? 1920 : 640;
+        const key = JSON.stringify([file, fileStat.mtimeMs, width, height, maxSize, text[file]]);
         const captureUrl = `http://127.0.0.1:${server.address().port}/__prototype-board/thumbnail-frame?file=${encodeURIComponent(file)}`;
-        const image = await renderThumbnail(key, captureUrl, width, height);
+        if (response.destroyed) return;
+        const client = new AbortController();
+        response.once('close', () => client.abort());
+        const image = await thumbnails.render(
+          key, captureUrl, width, height, maxSize, files,
+          client.signal, url.searchParams.has('priority'),
+        );
+        if (client.signal.aborted) return;
         if (!image) { response.writeHead(404).end(); return; }
         response.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'no-store' }).end(image);
         return;
@@ -174,6 +205,7 @@ export function createServer(directory) {
           const destination = path.join(root, EDITS_FILE);
           await writeFile(`${destination}.tmp`, `${JSON.stringify(edits, null, 2)}\n`);
           await rename(`${destination}.tmp`, destination);
+          thumbnailIndex = null;
           if (history) {
             history.pop();
             (history === undo ? redo : undo).push(before);
@@ -219,6 +251,7 @@ export function createServer(directory) {
       else response.writeHead(error.code === 'ENOENT' ? 404 : 400).end('Not found');
     }
   });
+  server.once('close', () => { void thumbnails.close(); });
   return server;
 }
 

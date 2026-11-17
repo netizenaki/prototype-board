@@ -27,6 +27,16 @@
   let canvasTile = null;
   let canvasFrame = null;
   let canvasVisible = false;
+  const visibleStills = new Set();
+  const thumbnailRequests = new Map();
+  let thumbnailFrame;
+  const thumbnailObserver = new IntersectionObserver((entries) => {
+    for (const { target, isIntersecting } of entries) {
+      if (isIntersecting && target.isConnected) visibleStills.add(target);
+      else visibleStills.delete(target);
+    }
+    scheduleThumbnails();
+  }, { root: viewport });
   const canvasObserver = new IntersectionObserver(([entry]) => {
     if (entry?.target !== canvasTile) return;
     canvasVisible = entry.isIntersecting;
@@ -172,7 +182,11 @@
     return file.split('/').map(encodeURIComponent).join('/');
   }
 
-  function makeStill(board) {
+  function thumbnailUrl(file, priority) {
+    return `/__prototype-board/thumbnail?file=${encodeURIComponent(file)}${priority ? '&priority=1' : ''}`;
+  }
+
+  function makeStill(board, priority = false) {
     const still = document.createElement('div');
     still.className = 'board-still';
     const fallback = document.createElement('span');
@@ -181,12 +195,56 @@
     if (canEdit) {
       const image = document.createElement('img');
       image.alt = '';
-      image.loading = 'lazy';
+      image.dataset.file = board.file;
       image.addEventListener('load', () => { image.classList.add('loaded'); }, { once: true });
-      image.src = `/__prototype-board/thumbnail?file=${encodeURIComponent(board.file)}`;
+      if (priority) image.src = thumbnailUrl(board.file, true) + '&full=1';
       still.append(image);
     }
     return still;
+  }
+
+  function scheduleThumbnails() {
+    cancelAnimationFrame(thumbnailFrame);
+    thumbnailFrame = requestAnimationFrame(loadThumbnails);
+  }
+
+  function loadThumbnails() {
+    const view = viewport.getBoundingClientRect();
+    const candidates = new Map();
+    if (!preview.open && !world.classList.contains('overview')) {
+      for (const image of visibleStills) {
+        const rect = image.getBoundingClientRect();
+        const overlap = Math.min(rect.right, view.right) - Math.max(rect.left, view.left);
+        if (rect.width < 150 || overlap < 32 || rect.bottom <= view.top || rect.top >= view.bottom) continue;
+        const distance = Math.abs(rect.top + rect.height / 2 - (view.top + view.height / 2))
+          + Math.abs(rect.left + rect.width / 2 - (view.left + view.width / 2));
+        candidates.set(image, image.dataset.file === playingFile ? -1 : distance);
+      }
+    }
+    for (const [image, request] of thumbnailRequests) {
+      if (!candidates.has(image)) request.abort();
+    }
+    const next = [...candidates].filter(([image]) => !image.src && !image.dataset.failed && !thumbnailRequests.has(image))
+      .sort((a, b) => a[1] - b[1]);
+    for (const [image, priority] of next.slice(0, Math.max(0, 2 - thumbnailRequests.size))) {
+      const request = new AbortController();
+      thumbnailRequests.set(image, request);
+      fetch(thumbnailUrl(image.dataset.file, priority < 0), { signal: request.signal }).then(async (response) => {
+        if (!response.ok) throw new Error('Thumbnail unavailable.');
+        const blob = await response.blob();
+        if (request.signal.aborted || !image.isConnected) return;
+        const url = URL.createObjectURL(blob);
+        const release = () => URL.revokeObjectURL(url);
+        image.addEventListener('load', release, { once: true });
+        image.addEventListener('error', release, { once: true });
+        image.src = url;
+      }).catch(() => {
+        if (!request.signal.aborted) image.dataset.failed = 'true';
+      }).finally(() => {
+        thumbnailRequests.delete(image);
+        scheduleThumbnails();
+      });
+    }
   }
 
   function makeLiveFrame(board) {
@@ -221,6 +279,7 @@
       const label = selected ? 'Pause on canvas' : 'Play on canvas';
       if (button.title !== label) setIcon(button, selected ? 'pause' : 'play', label, `${label} · ${button.dataset.title}`);
     }
+    scheduleThumbnails();
   }
 
   function setPaused(paused) {
@@ -466,6 +525,8 @@
     const nextPreview = active.findIndex((board) => board.file === previewFile);
     if (preview.open && nextPreview < 0) preview.close();
     world.replaceChildren();
+    thumbnailObserver.disconnect();
+    visibleStills.clear();
     watchCanvasTile(null);
     $('empty').hidden = active.length > 0;
     $('count').textContent = `${active.length} ${active.length === 1 ? 'board' : 'boards'}`;
@@ -479,6 +540,7 @@
     const fragment = document.createDocumentFragment();
     for (const board of active) fragment.append(makeBoard(board));
     world.append(fragment);
+    for (const image of world.querySelectorAll('.board-still img')) thumbnailObserver.observe(image);
     watchCanvasTile([...world.querySelectorAll('.board-frame')].find((frame) => frame.dataset.file === playingFile));
     if (nextPreview >= 0) openPreview(nextPreview);
     fit();
@@ -486,9 +548,11 @@
 
   function applyTransform() {
     world.style.transform = `translate(${pan.x}px, ${pan.y}px) scale(${scale})`;
+    world.classList.toggle('overview', scale < 0.18);
     const headerScale = Math.max(0.8, Math.min(1.4, Math.sqrt(scale)));
     world.style.setProperty('--header-unit', `${headerScale / scale}px`);
     $('zoom-value').textContent = `${Math.round(scale * 100)}%`;
+    scheduleThumbnails();
   }
 
   function fit() {
@@ -548,7 +612,7 @@
     const paused = $('preview-paused');
     const key = JSON.stringify([board.file, edits.text[board.file]]);
     if (paused.dataset.capture === key) return;
-    paused.replaceChildren(makeStill(board));
+    paused.replaceChildren(makeStill(board, true));
     paused.dataset.capture = key;
   }
 

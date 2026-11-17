@@ -123,6 +123,12 @@ test('persists edits and injects text overrides without changing source HTML', a
   assert.equal(state.title, 'Renamed project');
   assert.deepEqual(state.boards['welcome.html'], { title: 'Renamed board', x: 125, y: -80, note: 'Review this flow', deleted: false });
   assert.equal(state.text['welcome.html']['#title'], 'Changed');
+  const captureUrl = `${origin}/__prototype-board/thumbnail-frame?file=welcome.html`;
+  assert.equal((await fetch(captureUrl)).status, 200);
+  await edit({ action: 'delete', file: 'welcome.html' });
+  assert.equal((await fetch(captureUrl)).status, 404);
+  await edit({ action: 'undo' });
+  assert.equal((await fetch(captureUrl)).status, 200);
   const prototype = await fetch(`${origin}/welcome.html`);
   const html = await prototype.text();
   assert.match(html, /__PROTOTYPE_BOARD_OVERRIDES__=\{"#title":"Changed"\}/);

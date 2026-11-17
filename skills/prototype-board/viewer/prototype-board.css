@@ -78,6 +78,10 @@ button:hover { background: var(--bg); }
 .edit-mode .board-label { min-width: calc(140 * var(--header-unit)); }
 .edit-mode .board-label .board-delete { display: grid; }
 .board:hover, .board:focus-within { z-index: 1; }
+.overview .board { filter: none; }
+.overview .board-frame { background: transparent; }
+.overview .board-still { visibility: hidden; }
+.overview .board:not(:hover):not(:focus-within) .board-label { opacity: 0; }
 .empty { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; pointer-events: none; }
 .empty strong { font-size: 18px; }
 .empty p { color: var(--muted); }
