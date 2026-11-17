@@ -1,11 +1,23 @@
 import http from 'node:http';
-import { readFile, rename, writeFile } from 'node:fs/promises';
+import { createHash, randomUUID } from 'node:crypto';
+import { once } from 'node:events';
+import { readFile, rename, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
-import { safeHtmlPath } from './build.mjs';
-import { EDITS_FILE, emptyEdits, readEdits } from './edits.mjs';
+import { isDeepStrictEqual } from 'node:util';
+import { build, readExport, safeHtmlPath } from './build.mjs';
+import { EDITS_FILE, readEdits } from './edits.mjs';
+import { createThumbnailRenderer } from './thumbnail.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+const runtimeHash = createHash('sha256');
+for (const file of ['serve.mjs', 'build.mjs', 'edits.mjs', 'thumbnail.mjs', '../viewer/bridge.js']) {
+  runtimeHash.update(await readFile(path.join(here, file)));
+}
+const runtime = runtimeHash.digest('hex');
+const workspaceId = (root) => createHash('sha256').update(root).digest('hex');
+const serverPath = '/__prototype-board/server';
 const types = {
   '.css': 'text/css; charset=utf-8', '.gif': 'image/gif', '.html': 'text/html; charset=utf-8',
   '.jpeg': 'image/jpeg', '.jpg': 'image/jpeg', '.js': 'text/javascript; charset=utf-8',
@@ -33,7 +45,34 @@ function text(value, name, maximum = 100000, allowEmpty = false) {
   return value;
 }
 
-function update(edits, change) {
+async function update(edits, change, root) {
+  if (['create-page', 'rename-page', 'delete-page', 'move-to-page'].includes(change.action)) {
+    const { pages, boards } = await readExport(root);
+    const page = pages.find(({ id }) => id === change.page);
+    if (change.action !== 'create-page' && !page) throw new Error('Page does not exist.');
+    if (change.action === 'move-to-page') {
+      const file = safeHtmlPath(change.file);
+      if (!boards.some((board) => board.file === file && !board.deleted)) throw new Error('Board does not exist.');
+      edits.boards[file] = { ...edits.boards[file], page: page.id };
+      return edits;
+    }
+    const pageEdits = new Map((edits.pages ?? []).map((item) => [item.id, item]));
+    if (change.action === 'create-page') {
+      const id = randomUUID();
+      pageEdits.set(id, { id, name: text(change.name, 'page name', 200).trim() });
+    } else if (change.action === 'rename-page') {
+      pageEdits.set(page.id, { id: page.id, name: text(change.name, 'page name', 200).trim() });
+    } else {
+      const destination = pages.find(({ id }) => id === change.destination && id !== page.id);
+      if (!destination) throw new Error('Choose another page before deleting this page.');
+      pageEdits.set(page.id, { ...page, deleted: true });
+      for (const board of boards) {
+        if (board.page === page.id) edits.boards[board.file] = { ...edits.boards[board.file], page: destination.id };
+      }
+    }
+    edits.pages = [...pageEdits.values()];
+    return edits;
+  }
   if (change.action === 'rename-project') edits.title = text(change.title, 'title', 200);
   else {
     const file = safeHtmlPath(change.file);
@@ -52,30 +91,107 @@ function update(edits, change) {
 
 export function createServer(directory) {
   const root = path.resolve(directory);
+  const renderThumbnail = createThumbnailRenderer();
   let queue = Promise.resolve();
-  return http.createServer(async (request, response) => {
+  let restarting = false;
+  const undo = [];
+  const redo = [];
+  let lastSaved;
+
+  function state(response, edits) {
+    response.setHeader('X-Prototype-Board-Undo', String(undo.length > 0));
+    response.setHeader('X-Prototype-Board-Redo', String(redo.length > 0));
+    response.setHeader('Cache-Control', 'no-store');
+    json(response, 200, edits);
+  }
+
+  const server = http.createServer(async (request, response) => {
     try {
-      const pathname = decodeURIComponent(new URL(request.url, 'http://localhost').pathname);
+      const url = new URL(request.url, 'http://localhost');
+      const pathname = decodeURIComponent(url.pathname);
+      if (request.method === 'GET' && ['/__prototype-board/thumbnail', '/__prototype-board/thumbnail-frame'].includes(pathname)) {
+        const file = safeHtmlPath(url.searchParams.get('file'));
+        const { boards, edits } = await readExport(root);
+        const board = boards.find((item) => item.file === file && !item.deleted);
+        if (!board) { response.writeHead(404).end(); return; }
+        if (pathname.endsWith('-frame')) {
+          const src = file.split('/').map(encodeURIComponent).join('/');
+          response.writeHead(200, { 'Content-Type': types['.html'] }).end(
+            `<!doctype html><style>html,body,iframe{width:100%;height:100%;margin:0;border:0;display:block;overflow:hidden}</style><iframe sandbox="allow-scripts" src="/${src}"></iframe>`,
+          );
+          return;
+        }
+        const fileStat = await stat(path.join(root, file));
+        const width = Math.max(1, Math.min(8192, Math.round(board.w)));
+        const height = Math.max(1, Math.min(8192, Math.round(board.h)));
+        const key = JSON.stringify([file, fileStat.mtimeMs, width, height, edits.text[file]]);
+        const captureUrl = `http://127.0.0.1:${server.address().port}/__prototype-board/thumbnail-frame?file=${encodeURIComponent(file)}`;
+        const image = await renderThumbnail(key, captureUrl, width, height);
+        if (!image) { response.writeHead(404).end(); return; }
+        response.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'no-store' }).end(image);
+        return;
+      }
+      if (pathname === serverPath && request.method === 'GET') {
+        response.setHeader('Cache-Control', 'no-store');
+        json(response, 200, { workspace: workspaceId(root), runtime });
+        return;
+      }
+      if (pathname === serverPath && request.method === 'POST') {
+        // Browser pages cannot request a restart. The launcher runs locally in Node.
+        if (request.headers.origin || request.headers['sec-fetch-site'] ||
+            request.headers.host !== `127.0.0.1:${server.address()?.port}` ||
+            request.headers['x-prototype-board-restart'] !== workspaceId(root)) {
+          response.writeHead(403).end();
+          return;
+        }
+        restarting = true;
+        await queue.catch(() => {});
+        server.close();
+        response.writeHead(204, { Connection: 'close' }).end();
+        return;
+      }
       if (pathname === '/__prototype-board/state' && request.method === 'GET') {
-        json(response, 200, await readEdits(root));
+        state(response, await readEdits(root));
         return;
       }
       if (pathname === '/__prototype-board/edit' && request.method === 'POST') {
         const change = await body(request);
+        if (restarting) {
+          json(response, 503, { error: 'Prototype Board is restarting. Try the edit again.' });
+          return;
+        }
         const operation = queue.catch(() => {}).then(async () => {
-          const edits = update(await readEdits(root), change);
+          const before = await readEdits(root);
+          if (lastSaved && !isDeepStrictEqual(lastSaved, before)) {
+            undo.length = 0;
+            redo.length = 0;
+            lastSaved = undefined;
+          }
+          const history = change.action === 'undo' ? undo : change.action === 'redo' ? redo : null;
+          if (history && !history.length) return before;
+          const edits = history ? history.at(-1) : await update(structuredClone(before), change, root);
+          if (isDeepStrictEqual(edits, before)) return before;
           const destination = path.join(root, EDITS_FILE);
           await writeFile(`${destination}.tmp`, `${JSON.stringify(edits, null, 2)}\n`);
           await rename(`${destination}.tmp`, destination);
+          if (history) {
+            history.pop();
+            (history === undo ? redo : undo).push(before);
+          } else {
+            undo.push(before);
+            if (undo.length > 50) undo.shift();
+            redo.length = 0;
+          }
+          lastSaved = edits;
           return edits;
         });
         queue = operation;
-        json(response, 200, await operation);
+        state(response, await operation);
         return;
       }
       if (pathname === '/__prototype-board/bridge.js') {
         const content = await readFile(path.join(here, '..', 'viewer', 'bridge.js'));
-        response.writeHead(200, { 'Content-Type': types['.js'] }).end(content);
+        response.writeHead(200, { 'Content-Type': types['.js'], 'Cache-Control': 'no-store' }).end(content);
         return;
       }
 
@@ -93,13 +209,17 @@ export function createServer(directory) {
         const html = content.toString('utf8');
         content = /<\/body>/i.test(html) ? html.replace(/<\/body>/i, `${bridge}</body>`) : `${html}${bridge}`;
       }
-      response.writeHead(200, { 'Content-Type': types[path.extname(file)] ?? 'application/octet-stream' });
+      response.writeHead(200, {
+        'Content-Type': types[path.extname(file)] ?? 'application/octet-stream',
+        'Cache-Control': 'no-store',
+      });
       response.end(content);
     } catch (error) {
       if (request.method === 'POST') json(response, 400, { error: error.message });
       else response.writeHead(error.code === 'ENOENT' ? 404 : 400).end('Not found');
     }
   });
+  return server;
 }
 
 export function portFor(directory) {
@@ -109,23 +229,62 @@ export function portFor(directory) {
   return 42000 + hash % 10000;
 }
 
+async function openServer(directory) {
+  await build(directory);
+  const port = portFor(directory);
+  const origin = `http://127.0.0.1:${port}`;
+  const serverUrl = origin + serverPath;
+  const workspace = workspaceId(directory);
+  const deadline = Date.now() + 5000;
+  while (Date.now() < deadline) {
+    const server = createServer(directory);
+    try {
+      server.listen(port, '127.0.0.1');
+      await once(server, 'listening');
+      return `${origin}/index.html`;
+    } catch (error) {
+      if (error.code !== 'EADDRINUSE') throw error;
+    }
+
+    let status;
+    try {
+      const response = await fetch(serverUrl, { signal: AbortSignal.timeout(1000) });
+      if (response.ok) status = await response.json().catch(() => null);
+    } catch (error) {
+      if (error.cause?.code === 'ECONNREFUSED' || error.cause?.code === 'ECONNRESET') {
+        await delay(50);
+        continue;
+      }
+      throw error;
+    }
+    if (status?.workspace !== workspace || typeof status.runtime !== 'string') {
+      throw new Error(`Port ${port} is occupied by an older or unrelated server. Stop the previous Prototype Board task if it owns that port, then reopen the board.`);
+    }
+    if (status.runtime === runtime) return `${origin}/index.html`;
+
+    const restarted = await fetch(serverUrl, {
+      method: 'POST',
+      headers: { 'x-prototype-board-restart': workspace },
+      signal: AbortSignal.timeout(1000),
+    }).catch((error) => {
+      if (error.cause?.code !== 'ECONNREFUSED' && error.cause?.code !== 'ECONNRESET') throw error;
+    });
+    if (restarted && !restarted.ok) throw new Error(`The server on port ${port} could not be restarted.`);
+    await delay(50);
+  }
+  throw new Error(`Timed out waiting for the server on port ${port} to restart.`);
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   if (process.argv.length > 2) {
     console.error('Prototype Board always uses .prototype-board in the current project; directory arguments are not supported.');
     process.exitCode = 1;
   } else {
-    const directory = path.resolve('.prototype-board');
-    const port = portFor(directory);
-    const url = `http://127.0.0.1:${port}/index.html`;
-    const server = createServer(directory);
-    server.on('error', (error) => {
-      if (error.code === 'EADDRINUSE') {
-        console.log(url);
-        return;
-      }
+    try {
+      console.log(await openServer(path.resolve('.prototype-board')));
+    } catch (error) {
       console.error(`Prototype Board: ${error.message}`);
       process.exitCode = 1;
-    });
-    server.listen(port, '127.0.0.1', () => console.log(url));
+    }
   }
 }

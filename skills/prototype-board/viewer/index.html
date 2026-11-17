@@ -15,12 +15,21 @@
     </div>
     <div class="toolbar-controls">
       <label><span class="sr-only">Page</span><select id="pages"></select></label>
+      <details id="page-actions">
+        <summary aria-label="Page options" title="Page options">⋯</summary>
+        <div class="page-menu">
+          <button type="button" data-action="rename-page">Rename page…</button>
+          <button type="button" data-action="delete-page" class="danger">Delete page…</button>
+        </div>
+      </details>
       <label class="search"><span class="sr-only">Search boards</span><input id="search" type="search" placeholder="Search boards…" autocomplete="off"></label>
       <span id="count" class="count" aria-live="polite"></span>
     </div>
     <div class="view-controls" aria-label="Canvas controls">
       <button id="mode-toggle" type="button" aria-pressed="false" title="Switch to edit mode">Edit</button>
-      <button type="button" data-pause-animations aria-pressed="false">Pause animations</button>
+      <button id="undo" class="history-control" type="button" aria-label="Undo" title="Undo" disabled></button>
+      <button id="redo" class="history-control" type="button" aria-label="Redo" title="Redo" disabled></button>
+      <button type="button" data-pause-animations aria-pressed="false" aria-label="Pause animations" title="Pause animations"></button>
       <button id="zoom-value" type="button" title="Reset zoom (0)">100%</button>
       <button id="fit" type="button" title="Fit boards (F)">Fit</button>
       <button id="help" type="button" aria-label="Keyboard help" title="Help (?)">?</button>
@@ -32,21 +41,23 @@
     <div id="empty" class="empty" hidden><strong>No boards found</strong><p>Try another search or page.</p></div>
   </main>
 
-  <footer class="statusbar"><span id="interaction-hint">View mode · Drag to pan · Ctrl + scroll to zoom</span><span>Click a board to preview</span></footer>
+  <footer class="statusbar"><span id="interaction-hint">View mode · Drag to pan · Ctrl + scroll to zoom</span></footer>
 
-  <dialog id="preview" class="preview">
+  <dialog id="preview" class="preview" aria-labelledby="preview-title">
     <div class="preview-bar">
       <div class="preview-title"><strong id="preview-title"></strong><span id="preview-position"></span></div>
       <div class="preview-controls">
         <button id="preview-mode" type="button" aria-pressed="false" title="Switch to edit mode">Edit</button>
-        <button id="edit-text" type="button" title="Select a text element in the preview">Edit text</button>
-        <button id="note" type="button">Note</button>
-        <button id="rename-board" type="button">Rename</button>
-        <button id="delete-board" type="button" class="danger">Delete</button>
-        <button type="button" data-pause-animations aria-pressed="false">Pause animations</button>
+        <button type="button" data-pause-animations aria-pressed="false" aria-label="Pause animations" title="Pause animations"></button>
         <button id="previous" type="button" title="Previous board (←)">←</button>
         <button id="next" type="button" title="Next board (→)">→</button>
         <button id="close-preview" type="button" title="Close (Esc)">Close</button>
+      </div>
+      <div class="preview-edit-controls">
+        <button id="edit-text" type="button" title="Select a text element in the preview">Edit text</button>
+        <button id="note" type="button">Note</button>
+        <button id="move-to-page" type="button">Move to page</button>
+        <button id="delete-board" type="button" class="danger">Delete</button>
       </div>
     </div>
     <div id="text-editor" class="text-editor" hidden>
@@ -56,7 +67,13 @@
       <button id="copy-for-ai" type="button" title="Copy a structured request to paste into Kimi">Copy for Kimi</button>
       <button id="cancel-text" type="button">Cancel</button>
     </div>
-    <p id="preview-paused" role="status" hidden>Animations are paused. Toggle Pause animations to load the preview.</p>
+    <div id="preview-stage">
+      <div id="preview-sheet">
+        <div id="preview-content">
+          <div id="preview-paused" hidden></div>
+        </div>
+      </div>
+    </div>
   </dialog>
 
   <dialog id="note-dialog" class="note-dialog">
@@ -71,6 +88,7 @@
       <h2 id="action-title"></h2>
       <p id="action-message"></p>
       <input id="action-value" type="text" required aria-label="Name" autocomplete="off">
+      <select id="action-page" aria-label="Destination page" hidden></select>
       <div class="dialog-actions"><button id="cancel-action" type="button">Cancel</button><button id="confirm-action" value="confirm" class="primary">Save</button></div>
     </form>
   </dialog>
@@ -81,6 +99,7 @@
     <dl>
       <div><dt>Pan</dt><dd>Drag empty canvas or scroll</dd></div>
       <div><dt>Move an artboard</dt><dd>Drag its label</dd></div>
+      <div><dt>Rename an artboard</dt><dd>Double-click its name or focus it and press <kbd>F2</kbd></dd></div>
       <div><dt>Rename</dt><dd>Double-click its label</dd></div>
       <div><dt>Zoom</dt><dd><kbd>Ctrl</kbd> + scroll, <kbd>+</kbd>, <kbd>−</kbd></dd></div>
       <div><dt>Fit / 100%</dt><dd><kbd>F</kbd> / <kbd>0</kbd></dd></div>
@@ -88,7 +107,7 @@
       <div><dt>Preview navigation</dt><dd><kbd>←</kbd> <kbd>→</kbd> or <kbd>Esc</kbd></dd></div>
       <div><dt>This help</dt><dd><kbd>?</kbd></dd></div>
     </dl>
-    <p>Open previews to rename, delete, annotate, or select text. Only open trusted exports.</p>
+    <p>Open previews to annotate or select text. Only open trusted exports.</p>
   </dialog>
 
   <div id="toast" class="toast" role="status" hidden></div>

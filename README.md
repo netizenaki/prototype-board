@@ -78,9 +78,12 @@ Start a new Gemini CLI session to load the extension.
 
 1. From your project, ask your agent to **“Open my Prototype Board.”**
 2. Add trusted HTML prototypes to the project's `.prototype-board/` folder and ask the agent to reopen the board.
-3. Click an artboard to preview it. Use **Edit** to move or rename boards, add notes, or save text overrides. Use **Pause animations** to stop the live preview.
+3. Use **Play on canvas** or **Preview full screen** in an artboard's header. Double-click its name to rename it inline. Inactive or paused artboards show a still if Chrome, Chromium, or Edge is installed. Use **Edit** to organize artboards, add notes, or save text overrides.
+4. In **Edit** mode, choose **+ New page** from the page picker. Use **⋯** beside it to rename or delete the selected page, and **Move to page** in the preview to relocate an artboard.
 
-After updating the skill, reopen the board from its project to rebuild the viewer. Saved edits and source HTML are preserved.
+Use **Undo** and **Redo** in Edit mode. The running board server keeps the last 50 edits. Saved changes survive a server restart.
+
+After updating the skill, ask your agent to reopen the board from its project. This refreshes the viewer and updates the local server at the same URL. Saved edits and source HTML are preserved. If the server predates automatic updates and is still running, stop it once and reopen the board.
 
 <details>
 <summary><strong>Shortcuts and layout</strong></summary>
@@ -91,6 +94,7 @@ After updating the skill, reopen the board from its project to rebuild the viewe
 | Zoom | Ctrl + scroll |
 | Fit all boards | F |
 | Search | Ctrl / Cmd + K |
+| Undo / redo in Edit mode | Ctrl / Cmd + Z, or Ctrl / Cmd + Shift + Z |
 | Switch or close previews | ← / → or Esc |
 
 Boards are arranged in a grid by default. For custom page names, artboard dimensions, and positions, see [`example/canvas.json`](example/canvas.json).
@@ -100,14 +104,13 @@ Boards are arranged in a grid by default. For custom page names, artboard dimens
 <details>
 <summary><strong>Run without an agent</strong></summary>
 
-From the project you want to open, run both commands. Replace `/path/to/prototype-board-skill` with the path to the installed skill folder. In this repository, the skill folder is `skills/prototype-board`.
+From the project you want to open, run the server command. Replace `/path/to/prototype-board-skill` with the path to the installed skill folder. In this repository, the skill folder is `skills/prototype-board`.
 
 ```sh
-node "/path/to/prototype-board-skill/scripts/build.mjs"
 node "/path/to/prototype-board-skill/scripts/serve.mjs"
 ```
 
-Open the printed HTTP URL for editing. For read-only viewing, open `.prototype-board/index.html` directly.
+Open the printed HTTP URL for editing. To generate a read-only copy, run `scripts/build.mjs` from the installed skill and open `.prototype-board/index.html` directly.
 
 </details>
 

@@ -14,6 +14,7 @@ export async function readEdits(directory) {
       title: typeof value.title === 'string' ? value.title : null,
       boards: value.boards && typeof value.boards === 'object' ? value.boards : {},
       text: value.text && typeof value.text === 'object' ? value.text : {},
+      ...(Array.isArray(value.pages) && { pages: value.pages }),
     };
   } catch (error) {
     if (error.code === 'ENOENT') return emptyEdits();
@@ -22,10 +23,20 @@ export async function readEdits(directory) {
 }
 
 export function applyEdits(data, edits) {
+  const byId = new Map(data.pages.map((page) => [page.id, page]));
+  for (const page of edits.pages ?? []) byId.set(page.id, { ...byId.get(page.id), ...page });
+  const pages = [...byId.values()].filter((page) => !page.deleted);
+  if (!pages.length) pages.push({ id: 'all', name: 'All boards' });
+  const pageIds = new Set(pages.map((page) => page.id));
   return {
     ...data,
     title: edits.title ?? data.title,
-    boards: data.boards.map((board) => ({ ...board, ...edits.boards[board.file] })),
+    pages,
+    boards: data.boards.map((board) => {
+      const edited = { ...board, ...edits.boards[board.file] };
+      if (!pageIds.has(edited.page)) edited.page = pages[0].id;
+      return edited;
+    }),
     edits,
   };
 }

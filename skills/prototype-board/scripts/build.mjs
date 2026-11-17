@@ -38,7 +38,7 @@ function fallbackLayout(files) {
   };
 }
 
-export async function readExport(directory) {
+async function readLayout(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
   const files = entries
     .filter((entry) => entry.isFile() && entry.name.endsWith('.html') && !OUTPUT_FILES.includes(entry.name))
@@ -52,8 +52,7 @@ export async function readExport(directory) {
     if (error.code !== 'ENOENT') throw new Error(`Could not read canvas.json: ${error.message}`);
   }
 
-  const edits = await readEdits(directory);
-  if (!canvas) return applyEdits(fallbackLayout(files), edits);
+  if (!canvas) return fallbackLayout(files);
   const pages = Array.isArray(canvas.pages) && canvas.pages.length
     ? canvas.pages.map((page, index) => ({ id: String(page.id ?? `page-${index + 1}`), name: String(page.name ?? `Page ${index + 1}`) }))
     : [{ id: 'all', name: 'All boards' }];
@@ -77,9 +76,12 @@ export async function readExport(directory) {
     };
   });
 
-  return applyEdits({ title: String(canvas.title ?? 'Prototype Board'), pages, boards }, edits);
+  return { title: String(canvas.title ?? 'Prototype Board'), pages, boards };
 }
 
+export async function readExport(directory) {
+  return applyEdits(await readLayout(directory), await readEdits(directory));
+}
 export function serializeData(data) {
   const json = JSON.stringify(data, null, 2)
     .replaceAll('<', '\\u003c')
@@ -91,15 +93,16 @@ export function serializeData(data) {
 export async function build(directory) {
   const target = path.resolve(directory);
   await mkdir(target, { recursive: true });
-  const data = await readExport(target);
+  const layout = await readLayout(target);
+  const edits = await readEdits(target);
   const viewer = path.join(here, '..', 'viewer');
   const copies = OUTPUT_FILES.slice(0, 3).map(async (file) => {
     const content = await readFile(path.join(viewer, file), 'utf8');
     await writeFile(path.join(target, file), content);
   });
   await Promise.all(copies);
-  await writeFile(path.join(target, OUTPUT_FILES[3]), serializeData(data));
-  return data;
+  await writeFile(path.join(target, OUTPUT_FILES[3]), serializeData({ ...layout, edits }));
+  return applyEdits(layout, edits);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
