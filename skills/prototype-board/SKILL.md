@@ -54,7 +54,7 @@ The canvas displays one page at a time. New workspaces start with `unnamed`. Use
 
 Full-screen previews preserve the artboard's original viewport and scale down to fit the available width. Tall previews scroll vertically. Play and Pause use the same display size.
 
-Canvas stills upgrade as visible artboards grow with zoom or screen pixel density. Keep the original prototype viewport during capture so sharper stills preserve the layout. Captures are bounded to 4096 pixels on the longest edge.
+Visible artboards load static previews at every zoom level, including overview. Load a small still first, then upgrade as visible artboards grow with zoom or screen pixel density. Switching pages cancels abandoned thumbnail requests and their active captures. A capture shared by another open viewer continues while that viewer needs it. Keep the original prototype viewport during capture, including artboards taller than 8192 pixels, so stills preserve the layout and aspect ratio. Captured images are bounded to 4096 pixels on the longest edge.
 
 In Edit mode, choose + New page from the page picker. Open the Page options menu beside it to rename or delete the selected page. Use Move to page in the preview to relocate an artboard. When deleting a page, select a destination for its artboards. Keep at least one page.
 

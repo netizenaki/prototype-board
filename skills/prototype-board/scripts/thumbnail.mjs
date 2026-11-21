@@ -60,9 +60,10 @@ async function startBrowser(browser) {
   }
 }
 
-async function capturePng(address, url, width, height, maxSize) {
+async function capturePng(address, url, width, height, maxSize, cancellation) {
+  cancellation?.throwIfAborted();
   const socket = new WebSocket(address);
-  const signal = AbortSignal.timeout(10000);
+  const signal = AbortSignal.any([AbortSignal.timeout(10000), ...(cancellation ? [cancellation] : [])]);
   const pending = new Map();
   const interrupt = () => {
     for (const { reject } of pending.values()) reject(new Error('Thumbnail capture interrupted.'));
@@ -84,6 +85,7 @@ async function capturePng(address, url, width, height, maxSize) {
       socket.addEventListener('open', resolve, { once: true });
       socket.addEventListener('error', reject, { once: true });
       socket.addEventListener('close', reject, { once: true });
+      signal.addEventListener('abort', reject, { once: true });
     });
     socket.addEventListener('message', ({ data }) => {
       const message = JSON.parse(data);
@@ -135,11 +137,11 @@ async function capturePng(address, url, width, height, maxSize) {
   }
 }
 
-async function capture(address, url, width, height, maxSize) {
-  if (typeof WebSocket === 'function') return capturePng(address, url, width, height, maxSize);
+async function capture(address, url, width, height, maxSize, signal) {
+  if (typeof WebSocket === 'function') return capturePng(address, url, width, height, maxSize, signal);
   const { stdout } = await run(process.execPath, [
     '--experimental-websocket', script, address, url, String(width), String(height), String(maxSize),
-  ], { timeout: 15000, windowsHide: true, encoding: 'buffer', maxBuffer: 16 * 1024 * 1024 });
+  ], { signal, timeout: 15000, windowsHide: true, encoding: 'buffer', maxBuffer: 16 * 1024 * 1024 });
   return stdout;
 }
 
@@ -187,26 +189,36 @@ export function createThumbnailRenderer(root, revision) {
   let assetCheck;
   let assetCheckedAt = 0;
   let writes = 0;
-  let capturing = false;
+  let capturing = 0;
+  let recovering = false;
   let stopped = false;
 
-  function closeBrowser() {
+  function addClient(job, signal) {
+    job.signals.push(signal);
+    signal?.addEventListener('abort', job.cancel, { once: true });
+  }
+
+  async function closeBrowser() {
     clearTimeout(idleTimer);
     const previous = browser;
     browser = null;
-    return previous?.close();
+    const instance = await previous?.catch(() => null);
+    await instance?.close();
   }
 
   async function pump() {
-    if (capturing || !queued.length || stopped) return;
-    capturing = true;
+    if (capturing >= 2 || recovering || !queued.length || stopped) return;
+    capturing++;
     clearTimeout(idleTimer);
     const job = queued.shift();
+    pump();
     try {
       if (job.signals.some((signal) => !signal?.aborted)) {
-        browser ??= await startBrowser(executable);
+        browser ??= startBrowser(executable);
+        const instance = await browser;
         if (stopped) { await closeBrowser(); return; }
-        const image = await capture(browser.address, job.url, job.width, job.height, job.maxSize);
+        job.controller.signal.throwIfAborted();
+        const image = await capture(instance.address, job.url, job.width, job.height, job.maxSize, job.controller.signal);
         try {
           await mkdir(cacheDirectory, { recursive: true });
           const temporary = job.file + '.' + randomUUID() + '.tmp';
@@ -219,13 +231,18 @@ export function createThumbnailRenderer(root, revision) {
         job.resolve(image);
       }
     } catch {
-      await closeBrowser();
+      if (!job.controller.signal.aborted) recovering = true;
     } finally {
       job.resolve(null);
-      pending.delete(job.file);
-      capturing = false;
+      for (const signal of job.signals) signal?.removeEventListener('abort', job.cancel);
+      if (pending.get(job.file) === job) pending.delete(job.file);
+      capturing--;
+      if (!capturing && recovering) {
+        await closeBrowser();
+        recovering = false;
+      }
       if (queued.length && !stopped) pump();
-      else if (browser) idleTimer = setTimeout(closeBrowser, 30000).unref();
+      else if (!capturing && browser) idleTimer = setTimeout(closeBrowser, 30000).unref();
     }
   }
 
@@ -245,8 +262,8 @@ export function createThumbnailRenderer(root, revision) {
     }
     if (!executable || stopped || signal?.aborted) return null;
     const existing = pending.get(file);
-    if (existing) {
-      existing.signals.push(signal);
+    if (existing && !existing.controller.signal.aborted) {
+      addClient(existing, signal);
       const index = queued.indexOf(existing);
       if (priority && index > 0) queued.unshift(...queued.splice(index, 1));
       return existing.promise;
@@ -255,13 +272,18 @@ export function createThumbnailRenderer(root, revision) {
       if (queued[index].signals.every((item) => item?.aborted)) {
         const [abandoned] = queued.splice(index, 1);
         pending.delete(abandoned.file);
+        for (const client of abandoned.signals) client?.removeEventListener('abort', abandoned.cancel);
         abandoned.resolve(null);
       }
     }
     if (queued.length >= (priority ? 8 : 6)) return null;
     let resolve;
     const promise = new Promise((done) => { resolve = done; });
-    const job = { file, url, width, height, maxSize, signals: [signal], promise, resolve };
+    const job = { file, url, width, height, maxSize, signals: [], promise, resolve, controller: new AbortController() };
+    job.cancel = () => {
+      if (job.signals.every((client) => client?.aborted)) job.controller.abort();
+    };
+    addClient(job, signal);
     pending.set(file, job);
     if (priority) queued.unshift(job);
     else queued.push(job);
@@ -273,6 +295,10 @@ export function createThumbnailRenderer(root, revision) {
     render,
     close() {
       stopped = true;
+      for (const job of pending.values()) {
+        job.controller.abort();
+        for (const signal of job.signals) signal?.removeEventListener('abort', job.cancel);
+      }
       for (const job of queued.splice(0)) job.resolve(null);
       pending.clear();
       return closeBrowser();

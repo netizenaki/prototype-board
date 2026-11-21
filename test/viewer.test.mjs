@@ -5,17 +5,18 @@ import vm from 'node:vm';
 
 test('visible stills upgrade with zoom and pixel density without refetching sharper images', async () => {
   const source = await readFile(new URL('../skills/prototype-board/viewer/prototype-board.js', import.meta.url), 'utf8');
-  let width = 300;
+  let width = 20;
+  let left = 0;
   const image = {
     dataset: { file: 'phone.html' }, isConnected: true,
-    getBoundingClientRect: () => ({ left: 0, right: width, top: 0, bottom: width * 2, width, height: width * 2 }),
+    getBoundingClientRect: () => ({ left, right: left + width, top: 0, bottom: width * 2, width, height: width * 2 }),
     addEventListener() {},
   };
   const requests = [];
   const context = vm.createContext({
     window: { devicePixelRatio: 1 },
     viewport: { getBoundingClientRect: () => ({ left: 0, right: 1200, top: 0, bottom: 900, width: 1200, height: 900 }) },
-    preview: { open: false }, world: { classList: { contains: () => false } },
+    preview: { open: false }, world: { classList: { contains: () => true } },
     visibleStills: new Set([image]), thumbnailRequests: new Map(), playingFile: null,
     AbortController, URL, scheduleThumbnails() {},
     fetch: async (url) => { requests.push(url); return { ok: true, blob: async () => new Blob(['still']) }; },
@@ -29,6 +30,9 @@ test('visible stills upgrade with zoom and pixel density without refetching shar
   };
   await load();
   assert.match(requests[0], /size=640$/);
+  width = 300;
+  await load();
+  assert.equal(requests.length, 1);
   const previous = image.src;
   width = 600;
   vm.runInContext('loadThumbnails()', context);
@@ -44,4 +48,17 @@ test('visible stills upgrade with zoom and pixel density without refetching shar
   context.window.devicePixelRatio = 10;
   await load();
   assert.match(requests[3], /size=4096$/);
+  delete image.dataset.size;
+  left = -width;
+  await load();
+  assert.equal(requests.length, 4);
+  left = 0;
+  context.preview.open = true;
+  await load();
+  assert.equal(requests.length, 4);
+  context.preview.open = false;
+  await load();
+  assert.match(requests[4], /size=640$/);
+  await load();
+  assert.match(requests[5], /size=4096$/);
 });

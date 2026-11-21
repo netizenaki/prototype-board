@@ -145,8 +145,8 @@ export function createServer(directory) {
           return;
         }
         const fileStat = await stat(path.join(root, file));
-        const width = Math.max(1, Math.min(8192, Math.round(board.w)));
-        const height = Math.max(1, Math.min(8192, Math.round(board.h)));
+        const width = Math.max(1, Math.round(board.w));
+        const height = Math.max(1, Math.round(board.h));
         const requestedSize = Number(url.searchParams.get('size'));
         const maxSize = url.searchParams.has('full') ? 4096
           : [640, 1280, 2560, 4096].includes(requestedSize) ? requestedSize : 640;

@@ -221,11 +221,11 @@
   function loadThumbnails() {
     const view = viewport.getBoundingClientRect();
     const candidates = new Map();
-    if (!preview.open && !world.classList.contains('overview')) {
+    if (!preview.open) {
       for (const image of visibleStills) {
         const rect = image.getBoundingClientRect();
         const overlap = Math.min(rect.right, view.right) - Math.max(rect.left, view.left);
-        if (rect.width < 150 || overlap < 32 || rect.bottom <= view.top || rect.top >= view.bottom) continue;
+        if (overlap <= 0 || rect.bottom <= view.top || rect.top >= view.bottom) continue;
         const distance = Math.abs(rect.top + rect.height / 2 - (view.top + view.height / 2))
           + Math.abs(rect.left + rect.width / 2 - (view.left + view.width / 2));
         candidates.set(image, image.dataset.file === playingFile ? -1 : distance);
@@ -235,11 +235,11 @@
       if (!candidates.has(image)) request.abort();
     }
     const next = [...candidates].filter(([image]) => Number(image.dataset.size ?? 0) < stillSize(image)
-      && image.dataset.failed !== String(stillSize(image)) && !thumbnailRequests.has(image))
+      && image.dataset.failed !== String(image.dataset.size ? stillSize(image) : 640) && !thumbnailRequests.has(image))
       .sort((a, b) => a[1] - b[1]);
     for (const [image, priority] of next.slice(0, Math.max(0, 2 - thumbnailRequests.size))) {
       const request = new AbortController();
-      const size = stillSize(image);
+      const size = image.dataset.size ? stillSize(image) : 640;
       thumbnailRequests.set(image, request);
       fetch(thumbnailUrl(image.dataset.file, priority < 0) + `&size=${size}`, { signal: request.signal }).then(async (response) => {
         if (!response.ok) throw new Error('Thumbnail unavailable.');
@@ -533,6 +533,7 @@
   }
 
   function render() {
+    for (const request of thumbnailRequests.values()) request.abort();
     try { localStorage.setItem(pageKey, pageId); } catch {}
     const previewFile = preview.open ? active[previewIndex]?.file : null;
     active = boards.filter((board) => board.page === pageId && `${board.title} ${board.file}`.toLowerCase().includes(query));
